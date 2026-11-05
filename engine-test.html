@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChessLab — Engine Test</title>
+<style>
+body{background:#161512;color:#eee;font:16px system-ui;padding:20px}
+button{padding:12px;background:#81b64c;border:0;border-radius:6px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#262421;padding:12px;border-radius:8px}
+</style>
+</head>
+<body>
+<h2>ChessLab · Stockfish 19 Test</h2>
+<p>Tekan tombol untuk memeriksa koneksi engine.</p>
+<button id="test">Tes UCI Engine</button>
+<pre id="log">Belum dites.</pre>
+<script>
+const log = document.getElementById('log');
+document.getElementById('test').onclick = () => {
+  log.textContent = 'Memulai worker...\n';
+  let w;
+  try {
+    w = new Worker('./engine-worker.js');
+    w.onmessage = e => {
+      log.textContent += String(e.data) + '\n';
+      if (String(e.data) === 'uciok') w.postMessage('isready');
+      if (String(e.data) === 'readyok') {
+        log.textContent += '\nBERHASIL: engine siap menerima perintah UCI.';
+        w.terminate();
+      }
+    };
+    w.onerror = e => {
+      log.textContent += '\nERROR: ' + (e.message || 'Worker gagal');
+      w.terminate();
+    };
+    w.postMessage('uci');
+  } catch(e) {
+    log.textContent += '\nERROR: ' + e.message;
+  }
+};
+</script>
+</body>
+</html>
