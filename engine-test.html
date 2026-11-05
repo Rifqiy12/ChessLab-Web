@@ -3,40 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessLab — Engine Test</title>
+<title>ChessLab — Stockfish Search Test</title>
 <style>
-body{background:#161512;color:#eee;font:16px system-ui;padding:20px}
-button{padding:12px;background:#81b64c;border:0;border-radius:6px}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#262421;padding:12px;border-radius:8px}
+body{background:#161512;color:#eee;font:16px system-ui;padding:18px}
+button{padding:12px;background:#81b64c;border:0;border-radius:6px;font-weight:bold}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#262421;padding:12px;border-radius:8px;max-height:70vh;overflow:auto}
 </style>
 </head>
 <body>
-<h2>ChessLab · Stockfish 19 Test</h2>
-<p>Tekan tombol untuk memeriksa koneksi engine.</p>
-<button id="test">Tes UCI Engine</button>
+<h2>ChessLab · Stockfish Search Test</h2>
+<p>Uji engine pada posisi awal catur, kedalaman 8.</p>
+<button id="test">Mulai Analisis</button>
 <pre id="log">Belum dites.</pre>
 <script>
 const log = document.getElementById('log');
+let w, started = false;
+function add(s) {
+  log.textContent += s + '\n';
+  log.scrollTop = log.scrollHeight;
+}
 document.getElementById('test').onclick = () => {
-  log.textContent = 'Memulai worker...\n';
-  let w;
+  if (w) w.terminate();
+  log.textContent = 'Memulai Stockfish...\n';
+  started = false;
   try {
     w = new Worker('./engine-worker.js');
+    w.onerror = e => add('WORKER ERROR: ' + (e.message || 'gagal'));
     w.onmessage = e => {
-      log.textContent += String(e.data) + '\n';
-      if (String(e.data) === 'uciok') w.postMessage('isready');
-      if (String(e.data) === 'readyok') {
-        log.textContent += '\nBERHASIL: engine siap menerima perintah UCI.';
-        w.terminate();
+      const s = String(e.data || '');
+      if (/^(info depth|bestmove |uciok|readyok|id name|option name EvalFile|ERROR|Stockfish)/.test(s)) add(s);
+      if (s === 'uciok') w.postMessage('isready');
+      if (s === 'readyok' && !started) {
+        started = true;
+        w.postMessage('position startpos');
+        w.postMessage('go depth 8');
+        add('Perintah analisis dikirim: go depth 8');
       }
-    };
-    w.onerror = e => {
-      log.textContent += '\nERROR: ' + (e.message || 'Worker gagal');
-      w.terminate();
+      if (s.startsWith('bestmove ')) {
+        add('TES SELESAI: engine menghasilkan langkah terbaik.');
+      }
     };
     w.postMessage('uci');
   } catch(e) {
-    log.textContent += '\nERROR: ' + e.message;
+    add('ERROR: ' + e.message);
   }
 };
 </script>
