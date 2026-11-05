@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChessLab — Stockfish 19 Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+// Compatibility aliases for the browser-global chess.js build.
+window.addEventListener("DOMContentLoaded", function(){
+  if (window.Chess && Chess.prototype.load_pgn && !Chess.prototype.loadPgn) Chess.prototype.loadPgn = Chess.prototype.load_pgn;
+});
+</script>
+<style>
+:root{--bg:#161512;--panel:#262421;--panel2:#312e2b;--text:#e8e6e3;--muted:#a7a39d;--green:#81b64c;--green2:#a3d160;--light:#ebecd0;--dark:#779556;--line:#403d39;--red:#e05b55}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{height:64px;border-bottom:1px solid #302d29;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#1d1b18}
+.brand{font-weight:850;font-size:20px;letter-spacing:-.5px}.brand span{color:var(--green)}.engine-tag{font-size:12px;color:#d8e9c8;background:#293522;border:1px solid #405434;padding:6px 10px;border-radius:6px}
+main{max-width:1320px;margin:24px auto;padding:0 18px;display:grid;grid-template-columns:minmax(320px,680px) minmax(310px,1fr);gap:22px}
+.panel{background:var(--panel);border:1px solid #34312d;border-radius:10px;overflow:hidden}.board-panel{padding:16px}
+.board-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.move-badge{margin:0 0 10px;background:#1d1b18;border:1px solid #454139;border-radius:6px;padding:8px 10px;font-size:12px;color:#bcb7ae;min-height:34px}.move-badge.book{border-left:4px solid #6b9bce}.move-badge.good{border-left:4px solid #81b64c;color:#c8e8ae}.move-badge.bad{border-left:4px solid #d45b54;color:#ffaaa3}.player{font-size:13px;color:#d9d5cf}.subtle{color:var(--muted);font-size:12px}
+.board-wrap{display:grid;grid-template-columns:22px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 22px;gap:2px;max-width:640px;margin:auto}
+.ranks{display:flex;flex-direction:column-reverse;justify-content:space-around;align-items:center;font-size:11px;color:var(--muted);padding:2px 0}
+.files{grid-column:2;display:grid;grid-template-columns:repeat(8,1fr);text-align:center;font-size:11px;color:var(--muted);align-items:center}
+.board{width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);overflow:hidden;border-radius:2px;box-shadow:0 4px 18px #0004;touch-action:manipulation}
+.square{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;min-width:0;min-height:0}
+.square.light{background:var(--light)}.square.dark{background:var(--dark)}.square.last{background:#cdd26a}.square.selected{background:#f6f669}.square.legal:after{content:"";width:23%;height:23%;border-radius:50%;background:#0003;position:absolute}.square.legal:has(.piece):after{width:86%;height:86%;background:transparent;border:5px solid #0003}
+.piece{font-family:"DejaVu Sans","Arial Unicode MS",serif;font-size:clamp(25px,5.5vw,58px);line-height:1;position:relative;z-index:1;filter:drop-shadow(0 1px 1px #0005)}.piece-img{width:88%;height:88%;object-fit:contain;position:relative;z-index:1;pointer-events:none;filter:drop-shadow(0 1px 1px #0003)}.piece.white{color:#fff;text-shadow:0 1px 2px #333,1px 0 1px #555,-1px 0 1px #555}.piece.black{color:#222;text-shadow:0 1px 1px #fff5}
+.coord{position:absolute;font-size:10px;font-weight:700;left:3px;top:1px;z-index:2;opacity:.9}.light .coord{color:var(--dark)}.dark .coord{color:var(--light)}
+.controls{display:flex;justify-content:center;gap:8px;margin:14px 0 10px}.iconbtn{border:0;border-radius:6px;background:#3a3732;color:white;font-size:19px;min-width:42px;height:38px;cursor:pointer}.iconbtn:hover{background:#4a463f}.iconbtn:disabled{opacity:.35;cursor:not-allowed}.move-counter{text-align:center;color:var(--muted);font-size:12px}
+.eval-row{display:flex;gap:10px;align-items:center;margin-top:14px}.evalbar{height:10px;background:#111;border-radius:6px;overflow:hidden;flex:1;border:1px solid #4a4741}.evalfill{height:100%;width:50%;background:#eee;transition:width .2s}.evalscore{font-variant-numeric:tabular-nums;font-weight:700;min-width:54px;text-align:right}
+.right{display:flex;flex-direction:column;gap:14px;min-width:0}.section-head{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:750;display:flex;justify-content:space-between;align-items:center}.section-body{padding:15px 16px}
+textarea{width:100%;resize:vertical;min-height:150px;background:#1b1917;color:#e7e3dd;border:1px solid #514c45;border-radius:7px;padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}textarea:focus{border-color:var(--green)}
+button.primary{background:var(--green);color:#17200f;border:0;border-radius:7px;padding:10px 14px;font-weight:800;cursor:pointer}button.primary:hover{background:var(--green2)}button.secondary{background:#403c36;color:#f1eee8;border:1px solid #565149;border-radius:7px;padding:9px 12px;cursor:pointer}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.status{font-size:12px;color:var(--muted);margin-top:9px;min-height:18px}.status.error{color:#ff9a92}.status.ok{color:#b4df88}
+.engine-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#1d1b18;border-radius:7px;padding:11px}.metric .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}.metric .value{font-size:20px;font-weight:800;margin-top:3px}.pv{font-size:13px;line-height:1.8;overflow-wrap:anywhere;color:#dedbd4}.pv strong{color:var(--green2)}
+.moves{max-height:330px;overflow:auto;display:grid;grid-template-columns:48px 1fr 1fr;align-content:start;font-variant-numeric:tabular-nums}.moves-head{color:var(--muted);font-size:11px;padding:7px 10px;border-bottom:1px solid #393631}.move{padding:6px 10px;border:0;text-align:left;background:transparent;color:#e6e2db;cursor:pointer;border-radius:4px;font:inherit}.move:hover{background:#3b3832}.move.active{background:#526e38;color:#fff;font-weight:800}.move-num{color:var(--muted);padding:6px 8px;font-size:12px}
+.review-list{display:flex;flex-direction:column;gap:7px}.review-item{display:flex;justify-content:space-between;gap:10px;background:#1e1c19;padding:9px 10px;border-radius:6px;font-size:12px}.review-item b{color:#e5e0d8}.pill{border-radius:4px;padding:2px 6px;font-weight:800;white-space:nowrap}.blunder{background:#63302d;color:#ffb2ab}.mistake{background:#654723;color:#ffcf8d}.inaccuracy{background:#665c2d;color:#f4e5a0}.good{background:#2e4b31;color:#b7e5ae}
+.small-note{font-size:11px;color:var(--muted);line-height:1.5}.settings{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}.settings select{background:#1b1917;color:#eee;border:1px solid #514c45;border-radius:5px;padding:5px}
+footer{max-width:1320px;margin:0 auto;padding:0 20px 28px;color:#77736c;font-size:11px}
+@media(max-width:850px){main{grid-template-columns:1fr;margin:12px auto;gap:14px;padding:0 10px}.board-panel{padding:10px}.board-wrap{max-width:640px}.piece{font-size:clamp(24px,9vw,58px)}header{padding:0 14px}.engine-tag{font-size:10px}.moves{max-height:260px}}
+</style>
+</head>
+<body>
+<header><div class="brand">♟ Chess<span>Lab</span></div><div class="engine-tag">ENGINE · STOCKFISH 19</div></header>
+<main>
+  <section class="panel board-panel">
+    <div class="board-top"><div><div class="player" id="blackName">Black</div><div class="subtle" id="blackMeta">—</div></div><div class="subtle" id="gameMeta">PGN belum dimuat</div></div>
+    <div class="move-badge" id="moveBadge">Posisi awal — analisis game untuk melihat kualitas langkah.</div>
+    <div class="board-wrap"><div class="ranks" id="ranks"></div><div class="board" id="board" aria-label="Papan catur"></div><div class="files" id="files"></div></div>
+    <div class="board-top" style="margin:12px 0 0"><div class="player" id="whiteName">White</div><div class="subtle" id="whiteMeta">—</div></div>
+    <div class="eval-row"><div class="evalbar"><div class="evalfill" id="evalFill"></div></div><div class="evalscore" id="evalScore">—</div></div>
+    <div class="controls">
+      <button class="iconbtn" id="firstBtn" title="Awal">|◀</button><button class="iconbtn" id="prevBtn" title="Langkah sebelumnya">◀</button><button class="iconbtn" id="nextBtn" title="Langkah berikutnya">▶</button><button class="iconbtn" id="lastBtn" title="Akhir">▶|</button><button class="iconbtn" id="flipBtn" title="Balik papan">⇅</button><button class="iconbtn" id="soundBtn" title="Suara aktif/nonaktif">🔊</button>
+    </div><div class="move-counter" id="moveCounter">Langkah 0 / 0</div>
+  </section>
+  <div class="right">
+    <section class="panel">
+      <div class="section-head">Tempel PGN <span class="subtle">PGN Import</span></div>
+      <div class="section-body">
+        <textarea id="pgnInput" spellcheck="false" placeholder='Tempel PGN game kamu di sini, contoh:
+
+[Event "Online Game"]
+[White "Player 1"]
+[Black "Player 2"]
+[Result "1-0"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 1-0'></textarea>
+        <div class="actions"><button class="primary" id="loadBtn">Muat & tampilkan game</button><button class="secondary" id="sampleBtn">Coba contoh</button></div>
+        <div class="status" id="importStatus">Tempel PGN lalu tekan “Muat & tampilkan game”.</div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-head">Analisis engine <span class="subtle" id="engineStatus">Belum aktif</span></div>
+      <div class="section-body">
+        <div class="engine-grid">
+          <div class="metric"><div class="label">Evaluasi posisi</div><div class="value" id="evalText">—</div></div>
+          <div class="metric"><div class="label">Kedalaman</div><div class="value" id="depthText">—</div></div>
+        </div>
+        <div class="actions"><button class="primary" id="analyzeBtn">Analisis posisi ini</button><button class="secondary" id="reviewBtn">Review seluruh game</button><button class="secondary" id="stopBtn">Stop</button></div>
+        <div class="settings"><label>Kedalaman <select id="depth"><option value="10">10 · cepat</option><option value="14" selected>14 · seimbang</option><option value="18">18 · lebih dalam</option><option value="22">22 · berat</option></select></label><span>Berjalan di browser perangkatmu</span></div>
+        <div class="status" id="engineMessage">Engine akan dimuat saat analisis dimulai. Koneksi internet diperlukan.</div>
+        <div style="margin-top:12px"><div class="subtle" style="margin-bottom:6px">LANGKAH TERBAIK (PV)</div><div class="pv" id="pvText">Belum ada hasil analisis.</div></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-head">Notasi langkah <span class="subtle" id="plyLabel">0 ply</span></div>
+      <div class="moves" id="movesList"><div class="moves-head">No.</div><div class="moves-head">Putih</div><div class="moves-head">Hitam</div></div>
+    </section>
+    <section class="panel">
+      <div class="section-head">Temuan review <span class="subtle" id="reviewCount">Belum direview</span></div>
+      <div class="section-body"><div class="review-list" id="reviewList"><div class="small-note">Tekan “Review seluruh game” untuk mengecek langkah, perubahan evaluasi, dan kandidat kesalahan. Review bisa memerlukan waktu lebih lama.</div></div></div>
+    </section>
+  </div>
+</main>
+<footer>ChessLab adalah proyek independen, bukan produk resmi Chess.com. Stockfish 19 adalah engine open-source; koneksi internet dibutuhkan untuk memuat library dan engine.</footer>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const PIECES = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
+let game = null, history = [], positions = [], current = 0, flipped = false, selected = null, legalTargets = [];
+let worker = null, engineReady = false, waitingReady = [], analysisMode = null, reviewIndex = 0, reviewResults = [], activeSearch = false, latestEval = null, soundOn=true;
+const ChessCtor = () => (window.Chess || (window.chessjs && window.chessjs.Chess));
+function initBoardLabels(){ $('ranks').innerHTML = Array.from({length:8},(_,i)=>`<div>${flipped?i+1:8-i}</div>`).join(''); $('files').innerHTML = Array.from({length:8},(_,i)=>`<div>${'abcdefgh'[flipped?7-i:i]}</div>`).join(''); }
+function squareName(r,c){return 'abcdefgh'[c]+(8-r)}
+function renderBoard(){
+ initBoardLabels(); const board=$('board'); board.innerHTML='';
+ const b=positions[current]?.board || game?.board() || [];
+ const last=history[current-1];
+ let lastSquares=[];
+ if(last){lastSquares=[last.from,last.to]}
+ for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+   const rr=flipped?7-r:r, cc=flipped?7-c:c, sq=squareName(rr,cc);
+   const cell=document.createElement('div'); cell.className='square '+(((rr+cc)%2===0)?'light':'dark'); cell.dataset.square=sq;
+   if(lastSquares.includes(sq))cell.classList.add('last');
+   if(selected===sq)cell.classList.add('selected');
+   if(legalTargets.includes(sq))cell.classList.add('legal');
+   if(c===0){const coord=document.createElement('span');coord.className='coord';coord.textContent=8-rr;cell.appendChild(coord)}
+   const p=b[rr]?.[cc]; if(p){const img=document.createElement('img');img.className='piece-img';img.alt=p.color==='w'?'Putih '+p.type:'Hitam '+p.type;img.draggable=false;img.src='https://lichess1.org/assets/piece/cburnett/'+(p.color==='w'?'w':'b')+p.type.toUpperCase()+'.svg';img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'piece '+(p.color==='w'?'white':'black'),textContent:PIECES[p.color+p.type]}))};cell.appendChild(img)}
+   cell.addEventListener('click',()=>onSquare(sq));board.appendChild(cell);
+ }
+ $('moveCounter').textContent=`Langkah ${current} / ${history.length}`;
+ $('prevBtn').disabled=current===0;$('firstBtn').disabled=current===0;$('nextBtn').disabled=current>=history.length;$('lastBtn').disabled=current>=history.length;
+ $('plyLabel').textContent=`${history.length} ply`;
+ renderMoves();
+}
+function onSquare(sq){
+ if(!game)return;
+ if(selected && legalTargets.includes(sq)){
+   const before=current;
+   const g=new (ChessCtor())(); const loader=g.loadPgn||g.load_pgn; if(!loader.call(g,$('pgnInput').value)){return}
+   for(let i=0;i<current;i++)g.undo();
+   const move=g.move({from:selected,to:sq,promotion:'q'});
+   if(move){alert('Papan ini untuk meninjau PGN. Untuk menjaga notasi game asli, masukkan langkah baru lewat PGN.');}
+   selected=null;legalTargets=[];renderBoard();return;
+ }
+ const g=new (ChessCtor())(); const loader=g.loadPgn||g.load_pgn; loader.call(g,$('pgnInput').value); for(let i=0;i<current;i++)g.undo();
+ const piece=g.get(sq);
+ if(piece && piece.color===g.turn()){
+   selected=sq; legalTargets=g.moves({square:sq,verbose:true}).map(m=>m.to);
+ }else{selected=null;legalTargets=[]}
+ renderBoard();
+}
+function renderMoves(){
+ const box=$('movesList');box.innerHTML='<div class="moves-head">No.</div><div class="moves-head">Putih</div><div class="moves-head">Hitam</div>';
+ for(let i=0;i<history.length;i+=2){
+  const n=document.createElement('div');n.className='move-num';n.textContent=(i/2+1)+'.';box.appendChild(n);
+  for(let j=i;j<Math.min(i+2,history.length);j++){
+   const btn=document.createElement('button');btn.className='move'+(current===j+1?' active':'');btn.textContent=history[j].san;btn.onclick=()=>goto(j+1);box.appendChild(btn);
+  }
+  if(i+1>=history.length){const empty=document.createElement('div');box.appendChild(empty)}
+ }
+}
+function goto(n){current=Math.max(0,Math.min(history.length,n));selected=null;legalTargets=[];renderBoard();playMoveSound(current>0&&!!history[current-1]?.captured);updateMoveBadge();if(latestEval && positions[current]){$('engineMessage').textContent='Posisi berubah. Jalankan analisis lagi untuk evaluasi posisi ini.'}}
+const moveAudio=new Audio("sounds/move.wav");
+const captureAudio=new Audio("sounds/capture.wav");
+function playMoveSound(capture=false){if(!soundOn)return;try{const a=capture?captureAudio:moveAudio;a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>{})}catch(e){}}
+function updateMoveBadge(){const b=$('moveBadge');if(current===0){b.className='move-badge';b.textContent='Posisi awal · pilih “Analisis posisi ini” untuk evaluasi engine.';return}const m=history[current-1];b.className='move-badge';b.textContent=`Langkah ${Math.ceil(current/2)} · ${current%2?'Putih':'Hitam'} memainkan ${m.san} · jalankan analisis untuk melihat evaluasi.`}
+function loadPgn(pgn){
+ const C=ChessCtor(); if(!C)throw new Error('Library aturan catur belum berhasil dimuat. Periksa koneksi internet lalu refresh.');
+ const g=new C();
+ const loader = g.loadPgn || g.load_pgn; if(!loader) throw new Error('Library aturan catur tidak kompatibel.'); const ok=loader.call(g,pgn,{strict:false});
+ const hs=g.history({verbose:true});
+ if(!hs.length && !pgn.trim().match(/\[.*\]/))throw new Error('PGN tidak terbaca. Pastikan notasi langkah valid, misalnya: 1. e4 e5 2. Nf3 Nc6');
+ const replay=new C(), pos=[{fen:replay.fen(),board:replay.board()}];
+ for(const m of hs){replay.move(m);pos.push({fen:replay.fen(),board:replay.board()})}
+ game=g;history=hs;positions=pos;current=0;selected=null;legalTargets=[];latestEval=null;reviewResults=[];
+ const headers=g.getHeaders?g.getHeaders():(g.header?g.header():{});
+ $('whiteName').textContent=headers.White||'White';$('blackName').textContent=headers.Black||'Black';
+ $('whiteMeta').textContent=headers.WhiteElo?'Rating '+headers.WhiteElo:'—';$('blackMeta').textContent=headers.BlackElo?'Rating '+headers.BlackElo:'—';
+ $('gameMeta').textContent=[headers.Event,headers.Date,headers.Result].filter(Boolean).join(' · ')||'PGN dimuat';
+ $('importStatus').className='status ok';$('importStatus').textContent=`Berhasil memuat ${hs.length} setengah-langkah (${Math.ceil(hs.length/2)} langkah penuh).`;
+ $('reviewList').innerHTML='<div class="small-note">Tekan “Review seluruh game” untuk mengecek perubahan evaluasi per langkah.</div>';$('reviewCount').textContent='Belum direview';
+ $('evalText').textContent='—';$('evalScore').textContent='—';$('evalFill').style.width='50%';$('depthText').textContent='—';$('pvText').textContent='Belum ada hasil analisis.';
+ renderBoard();
+}
+function setStatus(msg,cls=''){ $('engineMessage').className='status '+cls; $('engineMessage').textContent=msg; }
+function initEngine(){
+ if(worker)return;
+ try {
+   worker=new Worker('./engine-worker.js');
+   worker.onmessage=e=>handleEngine(String(e.data||''));
+   worker.onerror=e=>{
+     setStatus('Engine worker gagal dimuat. Detail: '+(e.message||'worker error'),'error');
+     $('engineStatus').textContent='Error';activeSearch=false;
+   };
+   worker.postMessage('uci');
+ } catch(e) {
+   setStatus('Browser tidak dapat menjalankan engine worker. Buka aplikasi melalui hosting HTTPS, bukan file unduhan lokal.','error');
+   $('engineStatus').textContent='Error';
+ }
+}
+function handleEngine(line){
+ if(line.startsWith('ENGINE_ERROR ')){setStatus('Gagal memuat Stockfish: '+line.slice(13)+'. Kemungkinan browser memblokir worker atau koneksi CDN.','error');$('engineStatus').textContent='Error';activeSearch=false;return}
+ if(line==='uciok'){worker.postMessage('isready');return}
+ if(line==='readyok'){engineReady=true;$('engineStatus').textContent='Siap · SF19';setStatus('Stockfish 19 siap digunakan.','ok');if(waitingReady.length){const fn=waitingReady.shift();fn()}return}
+ if(line.startsWith('info ')){
+  const d=line.match(/\bdepth (\d+)/), cp=line.match(/\bscore cp (-?\d+)/), mate=line.match(/\bscore mate (-?\d+)/), pv=line.match(/\bpv (.+)$/);
+  if(d){$('depthText').textContent=d[1];}
+  if(cp){let v=Number(cp[1])/100; const stm=positions[current]?.fen.split(' ')[1]||'w'; if(stm==='b')v=-v;latestEval=v;showEval(v);}
+  if(mate){$('evalText').textContent='M'+mate[1];$('evalScore').textContent='M'+mate[1];}
+  if(pv){const tokens=pv[1].trim().split(/\s+/);$('pvText').innerHTML='<strong>'+tokens.slice(0,12).join(' ')+'</strong>'; }
+ }
+ if(line.startsWith('bestmove ')){
+  activeSearch=false;
+  const uci=(line.split(/\s+/)[1]||'');
+  if(uci && uci!=='(none)' && analysisMode==='single'){
+    let bestSan=uci;
+    try { const C=ChessCtor(); const temp=new C(); temp.load(positions[current].fen); const mv=temp.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci[4]||'q'}); if(mv) bestSan=mv.san; } catch(e){}
+    $('pvText').innerHTML='<strong>Terbaik: '+bestSan+'</strong><br><span style="color:#aaa">UCI: '+uci+'</span>';
+    $('moveBadge').className='move-badge good';$('moveBadge').textContent='♟ Langkah terbaik dari Stockfish 19: '+bestSan;
+  }
+  if(analysisMode==='review'){
+   const v=latestEval; reviewResults.push({ply:reviewIndex,eval:v,fen:positions[reviewIndex]?.fen});
+   reviewIndex++;
+   if(reviewIndex<positions.length){runReviewPosition();}else{analysisMode=null;finishReview();}
+  }else if(analysisMode==='single'){setStatus('Analisis posisi selesai.','ok');analysisMode=null;}
+ }
+}
+function showEval(v){
+ const white=Math.max(0,Math.min(100,50+v*9));$('evalFill').style.width=white+'%';
+ $('evalText').textContent=(v>0?'+':'')+v.toFixed(2);$('evalScore').textContent=(v>0?'+':'')+v.toFixed(2);
+}
+function readyThen(fn){if(engineReady)fn();else{waitingReady.push(fn);initEngine()}}
+function startPositionAnalysis(){
+ if(!game){setStatus('Muat PGN terlebih dahulu.','error');return}
+ analysisMode='single';latestEval=null;setStatus('Memulai Stockfish 19…');$('engineStatus').textContent='Memuat…';
+ readyThen(()=>{activeSearch=true;worker.postMessage('stop');worker.postMessage('position fen '+positions[current].fen);worker.postMessage('go depth '+$('depth').value);setStatus('Menganalisis posisi saat ini…');});
+}
+function stopAnalysis(){if(worker)worker.postMessage('stop');activeSearch=false;analysisMode=null;waitingReady=[];setStatus('Analisis dihentikan.');}
+function runReview(){
+ if(!game){setStatus('Muat PGN terlebih dahulu.','error');return}
+ stopAnalysis();reviewResults=[];reviewIndex=0;analysisMode='review';$('reviewList').innerHTML='';$('reviewCount').textContent='Berjalan…';setStatus('Menyiapkan review. Posisi akan dianalisis satu per satu; waktu bergantung pada kedalaman dan panjang game.');
+ readyThen(()=>runReviewPosition());
+}
+function runReviewPosition(){
+ if(analysisMode!=='review')return;
+ latestEval=null;activeSearch=true;
+ worker.postMessage('position fen '+positions[reviewIndex].fen);
+ worker.postMessage('go depth '+Math.min(Number($('depth').value),14));
+ setStatus(`Review posisi ${reviewIndex+1} dari ${positions.length}…`);
+}
+function finishReview(){
+ const rows=[];
+ for(let i=1;i<reviewResults.length;i++){
+  const prev=reviewResults[i-1].eval,cur=reviewResults[i].eval;
+  if(prev==null||cur==null)continue;
+  // Evaluation is normalized to side-to-move in the display, so compare absolute white score from FEN.
+  const prevFen=reviewResults[i-1].fen||'',curFen=reviewResults[i].fen||'';
+  let before=prev,after=cur;
+  if(prevFen.split(' ')[1]==='b')before=-before;
+  if(curFen.split(' ')[1]==='b')after=-after;
+  const mover=(i-1)%2===0?'Putih':'Hitam';
+  const loss=mover==='Putih'?before-after:after-before;
+  if(loss>0.7){
+   const move=history[i-1];
+   const label=loss>2?'Blunder':loss>1.2?'Kesalahan':'Kurang akurat';
+   rows.push({ply:i,move:move?.san||'—',mover,loss,label});
+  }
+ }
+ $('reviewCount').textContent=`${rows.length} temuan`;
+ if(!rows.length){$('reviewList').innerHTML='<div class="review-item"><b>Tidak ada perubahan evaluasi besar terdeteksi pada sampel ini.</b><span class="pill good">OK</span></div><div class="small-note">Ini estimasi berdasarkan kedalaman engine yang dipilih, bukan laporan game review setara Chess.com.</div>'}
+ else{$("reviewList").innerHTML=rows.slice(0,30).map(r=>{const icon=r.loss>2?"💥":r.loss>1.2?"⚠️":"🎯";return `<div class="review-item"><b>${icon} ${r.mover} · ${r.move} <span style="color:#aaa">${r.ply}</span></b><span class="pill ${r.loss>2?"blunder":r.loss>1.2?"mistake":"inaccuracy"}">${r.label} −${r.loss.toFixed(2)}</span></div>`}).join("")}
+ setStatus('Review selesai. Klik temuan untuk memeriksa posisi belum tersedia; gunakan notasi di atas untuk berpindah langkah.','ok');analysisMode=null;
+}
+$('loadBtn').onclick=()=>{try{loadPgn($('pgnInput').value.trim());}catch(e){$('importStatus').className='status error';$('importStatus').textContent=e.message}};
+$('sampleBtn').onclick=()=>{$('pgnInput').value='[Event "Contoh game"]\n[White "White"]\n[Black "Black"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 1-0';try{loadPgn($('pgnInput').value)}catch(e){$('importStatus').textContent=e.message}};
+$('firstBtn').onclick=()=>goto(0);$('prevBtn').onclick=()=>goto(current-1);$('nextBtn').onclick=()=>goto(current+1);$('lastBtn').onclick=()=>goto(history.length);
+$('flipBtn').onclick=()=>{flipped=!flipped;renderBoard()};
+$('analyzeBtn').onclick=startPositionAnalysis;$('reviewBtn').onclick=runReview;$('stopBtn').onclick=stopAnalysis;
+$('soundBtn').onclick=()=>{soundOn=!soundOn;$('soundBtn').textContent=soundOn?'🔊':'🔇';$('soundBtn').title=soundOn?'Suara aktif':'Suara nonaktif';if(soundOn)playMoveSound()};
+initBoardLabels();renderBoard();updateMoveBadge();
+})();
+</script>
+</body>
+</html>
